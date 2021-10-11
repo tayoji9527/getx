@@ -1,4 +1,6 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:modal_bottom_sheet/modal_bottom_sheet.dart';
 
 import '../../../get.dart';
 import '../router_report.dart';
@@ -23,6 +25,8 @@ mixin PageRouteReportMixin<T> on Route<T> {
 
 class GetPageRoute<T> extends PageRoute<T>
     with GetPageRouteTransitionMixin<T>, PageRouteReportMixin {
+  ModalBottomSheetRoute? _nextModalRoute;
+
   /// Creates a page route for use in an iOS designed app.
   ///
   /// The [builder], [maintainState], and [fullscreenDialog] arguments must not
@@ -127,4 +131,51 @@ class GetPageRoute<T> extends PageRoute<T>
 
   @override
   final double Function(BuildContext context)? gestureWidth;
+
+  @override
+  bool canTransitionTo(TransitionRoute nextRoute) {
+    return super.canTransitionTo(nextRoute) ||
+        (nextRoute is MaterialPageRoute && !nextRoute.fullscreenDialog) ||
+        (nextRoute is CupertinoPageRoute && !nextRoute.fullscreenDialog) ||
+        (nextRoute is MaterialWithModalsPageRoute &&
+            !nextRoute.fullscreenDialog) ||
+        (nextRoute is ModalBottomSheetRoute);
+  }
+
+  @override
+  void didChangeNext(Route? nextRoute) {
+    if (nextRoute is ModalBottomSheetRoute) {
+      _nextModalRoute = nextRoute;
+    }
+    super.didChangeNext(nextRoute);
+  }
+
+  @override
+  bool didPop(T? result) {
+    _nextModalRoute = null;
+    return super.didPop(result);
+  }
+
+  @override
+  Widget buildTransitions(BuildContext context, Animation<double> animation,
+      Animation<double> secondaryAnimation, Widget child) {
+    final theme = Theme.of(context).pageTransitionsTheme;
+    final nextRoute = _nextModalRoute;
+
+    if (nextRoute != null) {
+      if (!secondaryAnimation.isDismissed) {
+        final fakeSecondaryAnimation =
+            Tween<double>(begin: 0, end: 0).animate(secondaryAnimation);
+        final defaultTransition = theme.buildTransitions<T>(
+            this, context, animation, fakeSecondaryAnimation, child);
+        return nextRoute.getPreviousRouteTransition(
+            context, secondaryAnimation, defaultTransition);
+      } else {
+        _nextModalRoute = null;
+      }
+    }
+
+    return super
+        .buildTransitions(context, animation, secondaryAnimation, child);
+  }
 }
